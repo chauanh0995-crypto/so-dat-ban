@@ -16,6 +16,7 @@
   const ACTIVE = new Set(['Mới', 'Đã xác nhận', 'Đã đến']);
   const CLASH_MINUTES = 120;
   const MAX_IMAGES = 5;
+  const DECOR_ITEMS = ['Đặt bánh', 'Đặt hoa', 'Nhận bánh giùm', 'Nhận hoa giùm'];
   const IMAGE_SIDE = 1280;
   const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   const DOW_FULL = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
@@ -33,7 +34,8 @@
   const money = n => `${Number(n).toLocaleString('vi-VN')}đ`;
   const fold = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
   const byTime = (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
-  const tagsOf = b => [b.area === NO_AREA ? 'Không yêu cầu chỗ' : b.area, b.view && 'Sát view', b.decor && 'Decor'].filter(Boolean);
+  const decorOf = b => String(b.decorItems || '').split(',').filter(Boolean);
+  const tagsOf = b => [b.area === NO_AREA ? 'Không yêu cầu chỗ' : b.area, b.view && 'Sát view', b.decor && 'Decor', ...decorOf(b)].filter(Boolean);
   const imgs = b => b.images || [];
   const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
 
@@ -44,6 +46,8 @@
 
   let token = store.get('sdb_token');
   let me = store.get('sdb_name') || '';
+  let role = store.get('sdb_role') || 'edit';
+  const canEdit = () => role === 'edit';
   let rows = [];
   let rev = '';
   let date = today();
@@ -157,10 +161,10 @@
   // ---------- màn hình ----------
   function showLogin(msg) {
     $('#app').innerHTML = `<div class="login"><section>
-      <div><h1>Sổ Đặt Bàn</h1><p class="muted small">Nhập tên của bạn và mã nhóm do quản lý đưa.</p></div>
+      <div><h1>Sổ Đặt Bàn</h1><p class="muted small">Nhập tên của bạn và mã do quản lý đưa.</p></div>
       <form id="f-login">
         <label class="f">Tên của bạn<input id="l-name" required maxlength="30" autocomplete="name" value="${esc(me)}" placeholder="VD: Huyền"></label>
-        <label class="f">Mã nhóm<input id="l-code" required inputmode="numeric" autocomplete="off"></label>
+        <label class="f">Mã<input id="l-code" required inputmode="numeric" autocomplete="off"></label>
         <div class="err" id="l-err">${esc(msg || '')}</div>
         <button class="btn primary" type="submit">Vào sổ</button>
       </form></section></div>`;
@@ -211,13 +215,13 @@
       ${b.block ? `<div class="blk">Block: ${esc(b.block)}</div>` : ''}
       ${b.dishes || b.deposit ? `<div class="pre">${b.dishes ? `<div><b>Món đặt trước</b><p>${esc(b.dishes)}</p></div>` : ''}${b.deposit ? `<div class="dep"><span>Tiền cọc</span><b>${esc(money(b.deposit))}</b></div>` : ''}</div>` : ''}
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ''}
-      <div class="acts">${statusButtons(b)}</div>
+      ${canEdit() ? `<div class="acts">${statusButtons(b)}</div>` : ''}
       ${imgs(b).length ? `<div class="acts"><button class="btn" data-act="view" data-id="${esc(b.id)}">Xem ${imgs(b).length} hình</button></div>` : ''}
       <div class="acts tight">
         ${tel ? `<a class="btn" href="tel:${esc(tel)}">Gọi</a>
         <a class="btn" href="https://zalo.me/${esc(tel)}" target="_blank" rel="noopener">Zalo</a>` : ''}
         <button class="btn" data-act="share" data-id="${esc(b.id)}">Gửi nhóm</button>
-        <button class="btn" data-act="edit" data-id="${esc(b.id)}">Sửa</button>
+        ${canEdit() ? `<button class="btn" data-act="edit" data-id="${esc(b.id)}">Sửa</button>` : ''}
       </div>
       <div class="by">${esc(b.source)} · ${esc(b.createdBy)} ghi${b.updatedBy && b.updatedBy !== b.createdBy ? ` · ${esc(b.updatedBy)} sửa` : ''}</div>
     </article>`;
@@ -232,6 +236,11 @@
     else if (/iPhone|iPad/.test(ua)) text = 'Cài app: trong Safari bấm nút Chia sẻ, rồi “Thêm vào MH chính”.';
     if (!text) return '';
     return `<div class="tip"><span>${text}</span><button class="btn" data-act="notip">Ẩn</button></div>`;
+  }
+
+  function decorLine(active) {
+    const parts = DECOR_ITEMS.map(x => [x, active.filter(b => decorOf(b).includes(x)).length]).filter(p => p[1]);
+    return parts.length ? `<p class="small muted">${parts.map(([x, n]) => `${x}: ${n}`).join(' · ')}</p>` : '';
   }
 
   /** Danh sách bàn, khu cần block trong ngày, xếp theo khu vực. */
@@ -265,9 +274,9 @@
     }).join('');
     return `<div class="sum">
         <div><h2>${head}</h2>${q ? '' : `<p>${active.length} bàn · ${guests} khách${waiting ? ` · ${waiting} chờ xác nhận` : ''}${deposits ? ` · cọc ${money(deposits)}` : ''}</p>`}</div>
-        ${!q && active.length ? `<button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button>` : ''}
+        ${!q && active.length ? `<div class="acts"><button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button><button class="btn" data-act="export">In / xuất file</button></div>` : ''}
       </div>
-      ${q ? '' : `<div class="stats">${stats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}`}
+      ${q ? '' : `<div class="stats">${stats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${decorLine(active)}${blockPanel(active)}`}
       <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
   }
 
@@ -283,7 +292,7 @@
     $('#app').innerHTML = `
       <header class="band"><div class="gut">
         <h1>Sổ Đặt Bàn</h1>
-        <div class="who"><span class="dot ${online ? '' : 'off'}" title="${online ? 'Đang kết nối' : 'Mất kết nối'}"></span><b>${esc(me)}</b><button class="btn" data-act="logout">Thoát</button></div>
+        <div class="who"><span class="dot ${online ? '' : 'off'}" title="${online ? 'Đang kết nối' : 'Mất kết nối'}"></span><b>${esc(me)}</b>${canEdit() ? '' : '<span class="ro">Chỉ xem</span>'}<button class="btn" data-act="logout">Thoát</button></div>
       </div></header>
       <main class="gut">
         ${online ? '' : `<div class="tip"><span>Mất kết nối. Đang xem bản lưu gần nhất, chưa thêm hoặc sửa được.</span></div>`}
@@ -295,8 +304,71 @@
         </div>
         <div id="results">${resultsHtml()}</div>
       </main>
-      <button class="fab" data-act="new">+ Đặt bàn</button>`;
+      ${canEdit() ? `<button class="fab" data-act="new">+ Đặt bàn</button>` : ''}`;
     if (scroll) $('.days').scrollLeft = scroll;
+  }
+
+  // ---------- in và xuất file ----------
+  const COLUMNS = [
+    ['Giờ', b => b.time, 7], ['Khách', b => b.name, 20], ['SĐT', b => b.phone, 13], ['Số khách', b => b.guests, 8],
+    ['Bàn', b => b.table, 10], ['Khu vực', b => tagsOf(b).join(', '), 24], ['Block', b => b.block, 16],
+    ['Món đặt trước', b => b.dishes, 26], ['Cọc', b => (b.deposit ? money(b.deposit) : ''), 11],
+    ['Ghi chú', b => b.note, 22], ['Trạng thái', b => b.status, 12],
+  ];
+  const exportList = () => rows.filter(b => b.date === date && ACTIVE.has(b.status)).sort(byTime);
+
+  function exportTitle(list) {
+    const guests = list.reduce((s, b) => s + b.guests, 0);
+    const counts = TAGS.map(([, label, test]) => `${label} ${list.filter(test).length}`).join(' · ');
+    return [`Đặt bàn ${dayLabel(date)}/${parse(date).getFullYear()}`, `${list.length} bàn · ${guests} khách · ${counts}`];
+  }
+
+  function openExport() {
+    const v = $('#viewer');
+    v.innerHTML = `<div class="bk"><div class="dh"><h2>Xuất danh sách ${esc(dayLabel(date))}</h2><button class="btn" type="button" data-act="close-view">Đóng</button></div>
+      <button class="btn primary" data-act="print">In hoặc lưu PDF</button>
+      <button class="btn" data-act="excel">Tải file Excel</button>
+      <p class="small muted">Gồm các bàn còn hiệu lực trong ngày, không gồm bàn đã huỷ và không đến.</p></div>`;
+    v.showModal();
+  }
+
+  function printDay() {
+    const list = exportList();
+    const [title, sub] = exportTitle(list);
+    $('#print').innerHTML = `<h1>${esc(title)}</h1><p>${esc(sub)}</p><table><thead><tr>${COLUMNS.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead>
+      <tbody>${list.map(b => `<tr>${COLUMNS.map(c => `<td>${esc(c[1](b))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    window.print();
+  }
+
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'vendor/xlsx.full.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Không tải được công cụ Excel, kiểm tra mạng.'));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function excelDay() {
+    await loadXlsx();
+    const list = exportList();
+    const [title, sub] = exportTitle(list);
+    const sheet = XLSX.utils.aoa_to_sheet([[title], [sub], [], COLUMNS.map(c => c[0]), ...list.map(b => COLUMNS.map(c => c[1](b)))]);
+    sheet['!cols'] = COLUMNS.map(c => ({ wch: c[2] }));
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, 'Dat ban');
+    const file = new File([XLSX.write(book, { type: 'array', bookType: 'xlsx' })], `dat-ban-${date}.xlsx`,
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file);
+    a.download = file.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   }
 
   // ---------- form ----------
@@ -324,6 +396,7 @@
         <label class="opt"><input type="checkbox" id="f-view" ${v.view ? 'checked' : ''}>Sát view</label>
         <label class="opt"><input type="checkbox" id="f-decor" ${v.decor ? 'checked' : ''}>Bàn decor</label>
       </div>
+      <div class="opts sub" id="f-decor-sub" ${v.decor ? '' : 'hidden'}>${DECOR_ITEMS.map(x => `<label class="opt"><input type="checkbox" name="f-di" value="${x}" ${decorOf(v).includes(x) ? 'checked' : ''}>${x}</label>`).join('')}</div>
       <fieldset class="box">
         <legend>Món đặt trước &amp; tiền cọc</legend>
         <label class="f">Món đặt trước<textarea id="f-dishes" rows="3" maxlength="500" placeholder="VD: 2 lẩu gà, 1 bánh kem">${esc(v.dishes)}</textarea></label>
@@ -432,6 +505,7 @@
       date: $('#f-date').value, time: $('#f-time').value, name: $('#f-name').value, phone: $('#f-phone').value,
       guests: Number($('#f-guests').value), table: $('#f-table').value,
       area: ($('input[name=f-area]:checked') || {}).value || '', view: $('#f-view').checked, decor: $('#f-decor').checked, deposit: Number($('#f-deposit').value || 0), dishes: $('#f-dishes').value, block: $('#f-block').value,
+      decorItems: [...document.querySelectorAll('[name=f-di]:checked')].map(x => x.value).join(','),
       source: $('#f-source').value, note: $('#f-note').value,
     };
     btn.disabled = true;
@@ -472,6 +546,9 @@
     else if (act === 'edit') openForm(find());
     else if (act === 'close') $('#dlg').close();
     else if (act === 'view') openViewer(find());
+    else if (act === 'export') openExport();
+    else if (act === 'print') { $('#viewer').close(); printDay(); }
+    else if (act === 'excel') { $('#viewer').close(); excelDay().catch(err => toast(err.message)); }
     else if (act === 'close-view') $('#viewer').close();
     else if (act === 'rm-new') { pendingImages.splice(Number(t.dataset.i), 1); renderThumbs(); }
     else if (act === 'rm-img') {
@@ -502,6 +579,7 @@
   });
 
   document.addEventListener('change', e => {
+    if (e.target.id === 'f-decor') { $('#f-decor-sub').hidden = !e.target.checked; return; }
     if (e.target.id === 'f-files') { addFiles([...e.target.files]); e.target.value = ''; return; }
     if (e.target.id === 'pick' && e.target.value) { date = e.target.value; query = ''; tag = ''; render(); }
   });
@@ -514,8 +592,8 @@
     err.textContent = 'Đang vào…';
     try {
       const data = await api('login', { name: $('#l-name').value, code: $('#l-code').value });
-      token = data.token; me = data.name;
-      store.set('sdb_token', token); store.set('sdb_name', me);
+      token = data.token; me = data.name; role = data.role || 'edit';
+      store.set('sdb_token', token); store.set('sdb_name', me); store.set('sdb_role', role);
       absorb(data);
       online = true;
       render();

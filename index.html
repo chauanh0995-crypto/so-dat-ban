@@ -37,6 +37,7 @@ p{margin:0}
 .band h1{font-size:1.2rem}
 .who{display:flex;align-items:center;gap:8px;font-size:.85rem;min-width:0}
 .who b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.ro{font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.2);white-space:nowrap}
 .dot{width:9px;height:9px;border-radius:50%;background:#7fe3b4;flex:none}
 .dot.off{background:#ffb4a6}
 .btn{font:inherit;font-weight:500;font-size:.9rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-height:40px;padding:6px 12px;border-radius:9px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:5px}
@@ -121,6 +122,8 @@ label.f{display:grid;gap:4px;font-size:.84rem;color:var(--muted);min-width:0}
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .opts.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .opts.three .opt{padding:6px 7px;gap:5px;font-size:.84rem;line-height:1.2}
+.opts.sub{padding-left:14px;border-left:3px solid var(--accent)}
+.opts[hidden]{display:none}
 .opt{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 11px;border:1px solid var(--line);border-radius:9px;font-size:.95rem;cursor:pointer}
 .opt input{width:18px;height:18px;flex:none;margin:0;accent-color:var(--accent)}
 .opt:has(input:checked){border-color:var(--accent);background:var(--done-bg);font-weight:600}
@@ -137,6 +140,21 @@ label.f{display:grid;gap:4px;font-size:.84rem;color:var(--muted);min-width:0}
 .err:empty{display:none}
 .muted{color:var(--muted)} .small{font-size:.86rem}
 #toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(12px + env(safe-area-inset-top,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.92rem;width:max-content;max-width:calc(100% - 32px);z-index:9}
+#print{display:none}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  #app,#toast,dialog{display:none!important}
+  body{background:#fff;color:#000;padding:0;font-size:10pt}
+  #print{display:block}
+  #print h1{font-size:15pt;margin:0}
+  #print p{margin:2pt 0 8pt}
+  #print table{width:100%;border-collapse:collapse;font-size:9pt}
+  #print th,#print td{border:1px solid #666;padding:3pt 4pt;text-align:left;vertical-align:top;overflow-wrap:break-word;white-space:pre-line}
+  #print td:nth-child(1),#print td:nth-child(3),#print td:nth-child(9){white-space:nowrap}
+  #print th{background:#e8e8e8;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #print thead{display:table-header-group}
+  #print tr{break-inside:avoid}
+}
 </style>
 </head>
 <body>
@@ -144,6 +162,7 @@ label.f{display:grid;gap:4px;font-size:.84rem;color:var(--muted);min-width:0}
 <dialog id="dlg" aria-labelledby="dlg-t"></dialog>
 <dialog id="viewer" aria-label="Hình đặt bàn"></dialog>
 <div id="toast" role="status" hidden></div>
+<div id="print"></div>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>
