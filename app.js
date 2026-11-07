@@ -53,6 +53,7 @@
   let date = today();
   let query = '';
   let tag = '';
+  let decorTag = '';
   let online = true;
   let editing = null;
   let pendingImages = [];
@@ -260,9 +261,10 @@
   function resultsHtml() {
     const q = fold(query.trim());
     const picked = TAGS.find(t => t[0] === tag);
+    const subTag = tag === 'decor' ? decorTag : '';
     const list = q
       ? rows.filter(b => fold(`${b.name} ${b.phone} ${b.table} ${b.note} ${b.dishes} ${b.block || ''} ${tagsOf(b).join(' ')}`).includes(q)).sort(byTime).reverse()
-      : rows.filter(b => b.date === date && (!picked || (ACTIVE.has(b.status) && picked[2](b))))
+      : rows.filter(b => b.date === date && (!picked || (ACTIVE.has(b.status) && picked[2](b) && (!subTag || decorOf(b).includes(subTag)))))
         .sort((a, b) => (ACTIVE.has(b.status) - ACTIVE.has(a.status)) || byTime(a, b));
     const active = rows.filter(b => b.date === date && ACTIVE.has(b.status));
     const guests = active.reduce((s, b) => s + b.guests, 0);
@@ -275,12 +277,16 @@
       const people = hit.reduce((s, b) => s + b.guests, 0);
       return `<button class="stat" data-act="tag" data-v="${key}" aria-pressed="${tag === key}"><b>${hit.length}</b><span>${label}</span><small>${people} khách</small></button>`;
     }).join('');
+    const subStats = DECOR_ITEMS.map(x => {
+      const hit = active.filter(b => decorOf(b).includes(x));
+      return `<button class="stat" data-act="dtag" data-v="${x}" aria-pressed="${subTag === x}"><b>${hit.length}</b><span>${x}</span><small>${hit.reduce((s, b) => s + b.guests, 0)} khách</small></button>`;
+    }).join('');
     return `<div class="sum">
         <div><h2>${head}</h2>${q ? '' : `<p>${active.length} bàn · ${guests} khách${waiting ? ` · ${waiting} chờ xác nhận` : ''}${deposits ? ` · cọc ${money(deposits)}` : ''}</p>`}</div>
         ${!q && active.length ? `<div class="acts"><button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button><button class="btn" data-act="export">In / xuất file</button></div>` : ''}
       </div>
-      ${q ? '' : `<div class="stats">${stats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}${decorPanel(active)}`}
-      <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
+      ${q ? '' : `<div class="stats">${stats}</div>${tag === 'decor' ? `<div class="stats sub">${subStats}</div>` : ''}${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}${decorPanel(active)}`}
+      <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${subTag || picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
   }
 
   /** Đang gõ tìm kiếm thì không thay ô nhập, nếu không bộ gõ Telex trên điện thoại sẽ bị ngắt. */
@@ -544,7 +550,8 @@
     if (document.activeElement && document.activeElement.id === 'q') document.activeElement.blur(); // Safari không tự bỏ focus khi bấm nút
     const find = () => rows.find(b => b.id === t.dataset.id);
     if (act === 'date') { date = t.dataset.v; query = ''; tag = ''; clearBadge(); render(); }
-    else if (act === 'tag') { tag = tag === t.dataset.v ? '' : t.dataset.v; renderResults(); }
+    else if (act === 'tag') { tag = tag === t.dataset.v ? '' : t.dataset.v; decorTag = ''; renderResults(); }
+    else if (act === 'dtag') { decorTag = decorTag === t.dataset.v ? '' : t.dataset.v; renderResults(); }
     else if (act === 'new') { clearBadge(); openForm(); }
     else if (act === 'edit') openForm(find());
     else if (act === 'close') $('#dlg').close();

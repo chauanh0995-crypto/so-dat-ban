@@ -67,6 +67,9 @@ input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:va
 .stat b{font:700 1.3rem var(--f-display);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.2}
 .stat span{font-size:.74rem;font-weight:600;color:var(--ink);white-space:nowrap}
 .stat small{font-size:.68rem}
+.stats.sub{padding-top:0}
+.stats.sub .stat{border-color:var(--accent)}
+.stats.sub .stat span{white-space:normal;line-height:1.15}
 .stat[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .stat[aria-pressed="true"] b,.stat[aria-pressed="true"] span{color:var(--accent-ink)}
 .blocks{background:var(--bad-bg);border:1.5px solid var(--bad-edge);border-radius:11px;padding:10px 12px;margin-block:6px;display:grid;gap:3px;font-size:.92rem;overflow-wrap:anywhere}
