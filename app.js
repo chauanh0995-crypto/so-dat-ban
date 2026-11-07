@@ -12,6 +12,7 @@
     ['out', 'Ngoài trời', b => b.area === 'Ngoài trời'],
     ['view', 'Sát view', b => b.view],
     ['decor', 'Decor', b => b.decor],
+    ['dish', 'Đặt món', b => !!b.dishes],
   ];
   const ACTIVE = new Set(['Mới', 'Đã xác nhận', 'Đã đến']);
   const CLASH_MINUTES = 120;
