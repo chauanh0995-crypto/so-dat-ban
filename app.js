@@ -5,7 +5,8 @@
   const SOURCES = ['Điện thoại', 'Zalo', 'Facebook', 'Website', 'Tại quán', 'Khác'];
   const QUICK_TIMES = ['11:00', '12:00', '17:30', '18:00', '18:30', '19:00', '19:30'];
   const STATUS_CLASS = { 'Mới': '', 'Đã xác nhận': 's-ok', 'Đã đến': 's-done', 'Không đến': 's-off', 'Đã huỷ': 's-off' };
-  const AREAS = ['Trong nhà', 'Ngoài trời'];
+  const NO_AREA = 'Không yêu cầu';
+  const AREAS = ['Trong nhà', 'Ngoài trời', NO_AREA];
   const TAGS = [
     ['in', 'Trong nhà', b => b.area === 'Trong nhà'],
     ['out', 'Ngoài trời', b => b.area === 'Ngoài trời'],
@@ -32,7 +33,7 @@
   const money = n => `${Number(n).toLocaleString('vi-VN')}đ`;
   const fold = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
   const byTime = (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
-  const tagsOf = b => [b.area, b.view && 'Sát view', b.decor && 'Decor'].filter(Boolean);
+  const tagsOf = b => [b.area === NO_AREA ? 'Không yêu cầu chỗ' : b.area, b.view && 'Sát view', b.decor && 'Decor'].filter(Boolean);
   const imgs = b => b.images || [];
   const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
 
@@ -136,7 +137,8 @@
   function dayText() {
     const list = rows.filter(b => b.date === date && ACTIVE.has(b.status)).sort(byTime);
     const guests = list.reduce((s, b) => s + b.guests, 0);
-    const counts = TAGS.map(([, label, test]) => `${label} ${list.filter(test).length}`).join(' · ');
+    const free = list.filter(b => b.area === NO_AREA).length;
+    const counts = TAGS.map(([, label, test]) => `${label} ${list.filter(test).length}`).join(' · ') + (free ? ` · Không yêu cầu chỗ ${free}` : '');
     const total = list.reduce((s, b) => s + b.deposit, 0);
     return `📋 ĐẶT BÀN ${dayLabel(date)}: ${list.length} bàn, ${guests} khách\n${counts}\n${total ? `Tổng cọc: ${money(total)}\n` : ''}` +
       list.map(b => `${b.time} · ${b.guests} khách · ${b.name} · ${tagsOf(b).join(' · ')}${b.table ? ' · ' + b.table : ''}${b.block ? ' · Block: ' + b.block : ''}${b.dishes ? ' · Món: ' + b.dishes : ''}${b.deposit ? ' · Cọc ' + money(b.deposit) : ''}${b.note ? ' (' + b.note + ')' : ''}`).join('\n');
@@ -253,6 +255,7 @@
     const active = rows.filter(b => b.date === date && ACTIVE.has(b.status));
     const guests = active.reduce((s, b) => s + b.guests, 0);
     const waiting = active.filter(b => b.status === 'Mới').length;
+    const free = active.filter(b => b.area === NO_AREA);
     const deposits = active.reduce((s, b) => s + b.deposit, 0);
     const head = q ? `Tìm thấy ${list.length}` : `${date === today() ? 'Hôm nay' : DOW_FULL[parse(date).getDay()]}, ${ddmm(date)}`;
     const stats = TAGS.map(([key, label, test]) => {
@@ -264,7 +267,7 @@
         <div><h2>${head}</h2>${q ? '' : `<p>${active.length} bàn · ${guests} khách${waiting ? ` · ${waiting} chờ xác nhận` : ''}${deposits ? ` · cọc ${money(deposits)}` : ''}</p>`}</div>
         ${!q && active.length ? `<button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button>` : ''}
       </div>
-      ${q ? '' : `<div class="stats">${stats}</div>${blockPanel(active)}`}
+      ${q ? '' : `<div class="stats">${stats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}`}
       <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
   }
 
@@ -316,7 +319,7 @@
       </div>
       <label class="f">Số bàn<input id="f-table" maxlength="40" value="${esc(v.table)}" placeholder="VD: Bàn 5" autocomplete="off"></label>
       <label class="f">Block bàn / khu<input id="f-block" maxlength="80" value="${esc(v.block)}" placeholder="VD: Bàn 5, 6 hoặc cả sân vườn" autocomplete="off"></label>
-      <div class="opts" role="radiogroup" aria-label="Khu vực">${AREAS.map(a => `<label class="opt"><input type="radio" name="f-area" value="${a}" ${a === v.area ? 'checked' : ''}>${a}</label>`).join('')}</div>
+      <div class="opts three" role="radiogroup" aria-label="Khu vực">${AREAS.map(a => `<label class="opt"><input type="radio" name="f-area" value="${a}" ${a === v.area ? 'checked' : ''}>${a}</label>`).join('')}</div>
       <div class="opts">
         <label class="opt"><input type="checkbox" id="f-view" ${v.view ? 'checked' : ''}>Sát view</label>
         <label class="opt"><input type="checkbox" id="f-decor" ${v.decor ? 'checked' : ''}>Bàn decor</label>

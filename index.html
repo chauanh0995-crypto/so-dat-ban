@@ -119,6 +119,8 @@ label.f{display:grid;gap:4px;font-size:.84rem;color:var(--muted);min-width:0}
 .box legend{font-size:.84rem;font-weight:600;padding:0 6px;color:var(--new)}
 .box label.f{color:var(--ink)}
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opts.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.opts.three .opt{padding:6px 7px;gap:5px;font-size:.84rem;line-height:1.2}
 .opt{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 11px;border:1px solid var(--line);border-radius:9px;font-size:.95rem;cursor:pointer}
 .opt input{width:18px;height:18px;flex:none;margin:0;accent-color:var(--accent)}
 .opt:has(input:checked){border-color:var(--accent);background:var(--done-bg);font-weight:600}
