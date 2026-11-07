@@ -2,7 +2,12 @@
   'use strict';
   const API_URL = (window.SO_DAT_BAN || {}).API_URL || '';
   const POLL_MS = 30000;
-  const SOURCES = ['Điện thoại', 'Zalo', 'Facebook', 'Website', 'Tại quán', 'Khác'];
+  const SOURCES = ['TikTok', 'Facebook', 'Zalo', 'Điện thoại', 'Website', 'Tại quán', 'Khác'];
+  const MAIN_SOURCES = ['TikTok', 'Facebook', 'Zalo'];
+  const SRC_TILES = [
+    ...MAIN_SOURCES.map(x => [x, x, b => b.source === x]),
+    ['other', 'Nguồn khác', b => !MAIN_SOURCES.includes(b.source)],
+  ];
   const QUICK_TIMES = ['11:00', '12:00', '17:30', '18:00', '18:30', '19:00', '19:30'];
   const STATUS_CLASS = { 'Mới': '', 'Đã xác nhận': 's-ok', 'Đã đến': 's-done', 'Không đến': 's-off', 'Đã huỷ': 's-off' };
   const NO_AREA = 'Không yêu cầu';
@@ -55,6 +60,7 @@
   let query = '';
   let tag = '';
   let decorTag = '';
+  let srcTag = '';
   let online = true;
   let editing = null;
   let pendingImages = [];
@@ -145,8 +151,9 @@
     const guests = list.reduce((s, b) => s + b.guests, 0);
     const free = list.filter(b => b.area === NO_AREA).length;
     const counts = TAGS.map(([, label, test]) => `${label} ${list.filter(test).length}`).join(' · ') + (free ? ` · Không yêu cầu chỗ ${free}` : '');
+    const sources = 'Nguồn: ' + SRC_TILES.map(([, label, test]) => `${label} ${list.filter(test).length}`).join(' · ');
     const total = list.reduce((s, b) => s + b.deposit, 0);
-    return `📋 ĐẶT BÀN ${dayLabel(date)}: ${list.length} bàn, ${guests} khách\n${counts}\n${total ? `Tổng cọc: ${money(total)}\n` : ''}` +
+    return `📋 ĐẶT BÀN ${dayLabel(date)}: ${list.length} bàn, ${guests} khách\n${counts}\n${sources}\n${total ? `Tổng cọc: ${money(total)}\n` : ''}` +
       list.map(b => `${b.time} · ${b.guests} khách · ${b.name} · ${tagsOf(b).join(' · ')}${b.table ? ' · ' + b.table : ''}${b.block ? ' · Block: ' + b.block : ''}${b.dishes ? ' · Món: ' + b.dishes : ''}${b.deposit ? ' · Cọc ' + money(b.deposit) : ''}${b.note ? ' (' + b.note + ')' : ''}`).join('\n');
   }
 
@@ -263,9 +270,10 @@
     const q = fold(query.trim());
     const picked = TAGS.find(t => t[0] === tag);
     const subTag = tag === 'decor' ? decorTag : '';
+    const srcTile = SRC_TILES.find(t => t[0] === srcTag);
     const list = q
       ? rows.filter(b => fold(`${b.name} ${b.phone} ${b.table} ${b.note} ${b.dishes} ${b.block || ''} ${tagsOf(b).join(' ')}`).includes(q)).sort(byTime).reverse()
-      : rows.filter(b => b.date === date && (!picked || (ACTIVE.has(b.status) && picked[2](b) && (!subTag || decorOf(b).includes(subTag)))))
+      : rows.filter(b => b.date === date && (!srcTile || (ACTIVE.has(b.status) && srcTile[2](b))) && (!picked || (ACTIVE.has(b.status) && picked[2](b) && (!subTag || decorOf(b).includes(subTag)))))
         .sort((a, b) => (ACTIVE.has(b.status) - ACTIVE.has(a.status)) || byTime(a, b));
     const active = rows.filter(b => b.date === date && ACTIVE.has(b.status));
     const guests = active.reduce((s, b) => s + b.guests, 0);
@@ -278,6 +286,10 @@
       const people = hit.reduce((s, b) => s + b.guests, 0);
       return `<button class="stat" data-act="tag" data-v="${key}" aria-pressed="${tag === key}"><b>${hit.length}</b><span>${label}</span><small>${people} khách</small></button>`;
     }).join('');
+    const srcStats = SRC_TILES.map(([key, label, test]) => {
+      const hit = active.filter(test);
+      return `<button class="stat" data-act="src" data-v="${key}" aria-pressed="${srcTag === key}"><b>${hit.length}</b><span>${label}</span><small>${hit.reduce((s, b) => s + b.guests, 0)} khách</small></button>`;
+    }).join('');
     const subStats = DECOR_ITEMS.map(x => {
       const hit = active.filter(b => decorOf(b).includes(x));
       return `<button class="stat" data-act="dtag" data-v="${x}" aria-pressed="${subTag === x}"><b>${hit.length}</b><span>${x}</span><small>${hit.reduce((s, b) => s + b.guests, 0)} khách</small></button>`;
@@ -286,8 +298,8 @@
         <div><h2>${head}</h2>${q ? '' : `<p>${active.length} bàn · ${guests} khách${waiting ? ` · ${waiting} chờ xác nhận` : ''}${deposits ? ` · cọc ${money(deposits)}` : ''}</p>`}</div>
         ${!q && active.length ? `<div class="acts"><button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button><button class="btn" data-act="export">In / xuất file</button></div>` : ''}
       </div>
-      ${q ? '' : `<div class="stats">${stats}</div>${tag === 'decor' ? `<div class="stats sub">${subStats}</div>` : ''}${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}${decorPanel(active)}`}
-      <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${subTag || picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
+      ${q ? '' : `<div class="stats">${stats}</div>${tag === 'decor' ? `<div class="stats sub">${subStats}</div>` : ''}<div class="stats src">${srcStats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}${decorPanel(active)}`}
+      <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked || srcTile ? `Không có bàn ${subTag || (picked ? picked[1] : srcTile[1])} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
   }
 
   /** Đang gõ tìm kiếm thì không thay ô nhập, nếu không bộ gõ Telex trên điện thoại sẽ bị ngắt. */
@@ -323,7 +335,7 @@
     ['Giờ', b => b.time, 7], ['Khách', b => b.name, 20], ['SĐT', b => b.phone, 13], ['Số khách', b => b.guests, 8],
     ['Bàn', b => b.table, 10], ['Khu vực', b => tagsOf(b).join(', '), 24], ['Block', b => b.block, 16],
     ['Món đặt trước', b => b.dishes, 26], ['Cọc', b => (b.deposit ? money(b.deposit) : ''), 11],
-    ['Ghi chú', b => b.note, 22], ['Trạng thái', b => b.status, 12],
+    ['Ghi chú', b => b.note, 22], ['Nguồn', b => b.source, 10], ['Trạng thái', b => b.status, 12],
   ];
   const exportList = () => rows.filter(b => b.date === date && ACTIVE.has(b.status)).sort(byTime);
 
@@ -534,6 +546,7 @@
       date = booking.date;
       query = '';
       tag = '';
+      srcTag = '';
       render();
       toast(failed ? `Đã lưu, nhưng ${failed} hình chưa tải lên được. Mở Sửa để thêm lại.` : editing ? 'Đã lưu thay đổi.' : 'Đã lưu đặt bàn.');
     } catch (e) {
@@ -550,8 +563,9 @@
     const act = t.dataset.act;
     if (document.activeElement && document.activeElement.id === 'q') document.activeElement.blur(); // Safari không tự bỏ focus khi bấm nút
     const find = () => rows.find(b => b.id === t.dataset.id);
-    if (act === 'date') { date = t.dataset.v; query = ''; tag = ''; clearBadge(); render(); }
+    if (act === 'date') { date = t.dataset.v; query = ''; tag = ''; srcTag = ''; clearBadge(); render(); }
     else if (act === 'tag') { tag = tag === t.dataset.v ? '' : t.dataset.v; decorTag = ''; renderResults(); }
+    else if (act === 'src') { srcTag = srcTag === t.dataset.v ? '' : t.dataset.v; renderResults(); }
     else if (act === 'dtag') { decorTag = decorTag === t.dataset.v ? '' : t.dataset.v; renderResults(); }
     else if (act === 'new') { clearBadge(); openForm(); }
     else if (act === 'edit') openForm(find());
@@ -592,7 +606,7 @@
   document.addEventListener('change', e => {
     if (e.target.id === 'f-decor') { $('#f-decor-sub').hidden = !e.target.checked; return; }
     if (e.target.id === 'f-files') { addFiles([...e.target.files]); e.target.value = ''; return; }
-    if (e.target.id === 'pick' && e.target.value) { date = e.target.value; query = ''; tag = ''; render(); }
+    if (e.target.id === 'pick' && e.target.value) { date = e.target.value; query = ''; tag = ''; srcTag = ''; render(); }
   });
 
   document.addEventListener('submit', async e => {
