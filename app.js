@@ -117,7 +117,7 @@
   function bookingText(b) {
     return [
       `📌 ĐẶT BÀN ${dayLabel(b.date)} · ${b.time} · ${b.guests} khách`,
-      `${b.name} · ${b.phone}`,
+      b.phone ? `${b.name} · ${b.phone}` : b.name,
       tagsOf(b).join(' · '),
       b.table && `Bàn: ${b.table}`,
       b.dishes && `Món đặt trước: ${b.dishes}`,
@@ -204,8 +204,8 @@
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ''}
       <div class="acts">${statusButtons(b)}</div>
       <div class="acts tight">
-        <a class="btn" href="tel:${esc(tel)}">Gọi</a>
-        <a class="btn" href="https://zalo.me/${esc(tel)}" target="_blank" rel="noopener">Zalo</a>
+        ${tel ? `<a class="btn" href="tel:${esc(tel)}">Gọi</a>
+        <a class="btn" href="https://zalo.me/${esc(tel)}" target="_blank" rel="noopener">Zalo</a>` : ''}
         <button class="btn" data-act="share" data-id="${esc(b.id)}">Gửi nhóm</button>
         <button class="btn" data-act="edit" data-id="${esc(b.id)}">Sửa</button>
       </div>
@@ -291,7 +291,7 @@
       <div class="quick">${QUICK_TIMES.map(t => `<button type="button" data-act="time" data-v="${t}">${t}</button>`).join('')}</div>
       <label class="f">Tên khách<input id="f-name" required maxlength="60" value="${esc(v.name)}" autocomplete="off"></label>
       <div class="two">
-        <label class="f">Số điện thoại<input id="f-phone" required type="tel" inputmode="tel" maxlength="15" value="${esc(v.phone)}" autocomplete="off"></label>
+        <label class="f">Số điện thoại (nếu có)<input id="f-phone" type="tel" inputmode="tel" maxlength="15" value="${esc(v.phone)}" autocomplete="off"></label>
         <label class="f">Số khách<input id="f-guests" required type="number" inputmode="numeric" min="1" max="500" value="${esc(v.guests)}"></label>
       </div>
       <label class="f">Số bàn<input id="f-table" maxlength="40" value="${esc(v.table)}" placeholder="VD: Bàn 5" autocomplete="off"></label>
