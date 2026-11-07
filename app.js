@@ -238,9 +238,12 @@
     return `<div class="tip"><span>${text}</span><button class="btn" data-act="notip">Ẩn</button></div>`;
   }
 
-  function decorLine(active) {
-    const parts = DECOR_ITEMS.map(x => [x, active.filter(b => decorOf(b).includes(x)).length]).filter(p => p[1]);
-    return parts.length ? `<p class="small muted">${parts.map(([x, n]) => `${x}: ${n}`).join(' · ')}</p>` : '';
+  /** Bàn nào đặt hoặc nhận giùm bánh, hoa trong ngày, xếp theo từng loại. */
+  function decorPanel(active) {
+    const groups = DECOR_ITEMS.map(x => [x, active.filter(b => decorOf(b).includes(x)).sort(byTime)]).filter(g => g[1].length);
+    if (!groups.length) return '';
+    const line = b => `<p><b>${esc(b.table || 'Chưa xếp bàn')}</b> · ${esc(b.time)} · ${esc(b.name)}</p>`;
+    return `<section class="blocks decors"><h2>Bánh &amp; hoa</h2>${groups.map(([x, list]) => `<h3>${x} (${list.length})</h3>${list.map(line).join('')}`).join('')}</section>`;
   }
 
   /** Danh sách bàn, khu cần block trong ngày, xếp theo khu vực. */
@@ -276,7 +279,7 @@
         <div><h2>${head}</h2>${q ? '' : `<p>${active.length} bàn · ${guests} khách${waiting ? ` · ${waiting} chờ xác nhận` : ''}${deposits ? ` · cọc ${money(deposits)}` : ''}</p>`}</div>
         ${!q && active.length ? `<div class="acts"><button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button><button class="btn" data-act="export">In / xuất file</button></div>` : ''}
       </div>
-      ${q ? '' : `<div class="stats">${stats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${decorLine(active)}${blockPanel(active)}`}
+      ${q ? '' : `<div class="stats">${stats}</div>${free.length ? `<p class="small muted">Không yêu cầu chỗ: ${free.length} bàn · ${free.reduce((s, b) => s + b.guests, 0)} khách</p>` : ''}${blockPanel(active)}${decorPanel(active)}`}
       <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
   }
 
