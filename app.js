@@ -14,6 +14,8 @@
   ];
   const ACTIVE = new Set(['Mới', 'Đã xác nhận', 'Đã đến']);
   const CLASH_MINUTES = 120;
+  const MAX_IMAGES = 5;
+  const IMAGE_SIDE = 1280;
   const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   const DOW_FULL = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
@@ -31,6 +33,7 @@
   const fold = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
   const byTime = (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
   const tagsOf = b => [b.area, b.view && 'Sát view', b.decor && 'Decor'].filter(Boolean);
+  const imgs = b => b.images || [];
   const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
 
   const store = {
@@ -47,6 +50,8 @@
   let tag = '';
   let online = true;
   let editing = null;
+  let pendingImages = [];
+  const imageCache = new Map();
   let unseen = 0;
   let installEvent = null;
   try { const c = JSON.parse(store.get('sdb_cache') || 'null'); if (c) { rows = c.rows; } } catch (e) { /* bản lưu hỏng */ }
@@ -120,6 +125,7 @@
       b.phone ? `${b.name} · ${b.phone}` : b.name,
       tagsOf(b).join(' · '),
       b.table && `Bàn: ${b.table}`,
+      b.block && `Block: ${b.block}`,
       b.dishes && `Món đặt trước: ${b.dishes}`,
       b.deposit ? `Cọc: ${money(b.deposit)}` : '',
       b.note && `Ghi chú: ${b.note}`,
@@ -133,7 +139,7 @@
     const counts = TAGS.map(([, label, test]) => `${label} ${list.filter(test).length}`).join(' · ');
     const total = list.reduce((s, b) => s + b.deposit, 0);
     return `📋 ĐẶT BÀN ${dayLabel(date)}: ${list.length} bàn, ${guests} khách\n${counts}\n${total ? `Tổng cọc: ${money(total)}\n` : ''}` +
-      list.map(b => `${b.time} · ${b.guests} khách · ${b.name} · ${tagsOf(b).join(' · ')}${b.table ? ' · ' + b.table : ''}${b.dishes ? ' · Món: ' + b.dishes : ''}${b.deposit ? ' · Cọc ' + money(b.deposit) : ''}${b.note ? ' (' + b.note + ')' : ''}`).join('\n');
+      list.map(b => `${b.time} · ${b.guests} khách · ${b.name} · ${tagsOf(b).join(' · ')}${b.table ? ' · ' + b.table : ''}${b.block ? ' · Block: ' + b.block : ''}${b.dishes ? ' · Món: ' + b.dishes : ''}${b.deposit ? ' · Cọc ' + money(b.deposit) : ''}${b.note ? ' (' + b.note + ')' : ''}`).join('\n');
   }
 
   async function shareText(text) {
@@ -200,9 +206,11 @@
         <span class="pill ${STATUS_CLASS[b.status] || ''}">${esc(b.status)}</span>
       </div>
       <div class="tags">${tagsOf(b).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
+      ${b.block ? `<div class="blk">Block: ${esc(b.block)}</div>` : ''}
       ${b.dishes || b.deposit ? `<div class="pre">${b.dishes ? `<div><b>Món đặt trước</b><p>${esc(b.dishes)}</p></div>` : ''}${b.deposit ? `<div class="dep"><span>Tiền cọc</span><b>${esc(money(b.deposit))}</b></div>` : ''}</div>` : ''}
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ''}
       <div class="acts">${statusButtons(b)}</div>
+      ${imgs(b).length ? `<div class="acts"><button class="btn" data-act="view" data-id="${esc(b.id)}">Xem ${imgs(b).length} hình</button></div>` : ''}
       <div class="acts tight">
         ${tel ? `<a class="btn" href="tel:${esc(tel)}">Gọi</a>
         <a class="btn" href="https://zalo.me/${esc(tel)}" target="_blank" rel="noopener">Zalo</a>` : ''}
@@ -224,11 +232,22 @@
     return `<div class="tip"><span>${text}</span><button class="btn" data-act="notip">Ẩn</button></div>`;
   }
 
+  /** Danh sách bàn, khu cần block trong ngày, xếp theo khu vực. */
+  function blockPanel(active) {
+    const list = active.filter(b => b.block && b.status !== 'Đã đến').sort(byTime);
+    if (!list.length) return '';
+    const group = area => {
+      const hit = list.filter(b => b.area === area);
+      return hit.length ? `<h3>${area}</h3>${hit.map(b => `<p><b>${esc(b.block)}</b> · ${esc(b.time)} · ${esc(b.name)}</p>`).join('')}` : '';
+    };
+    return `<section class="blocks"><h2>${date === today() ? 'Hôm nay' : 'Ngày này'} cần block</h2>${AREAS.map(group).join('')}</section>`;
+  }
+
   function resultsHtml() {
     const q = fold(query.trim());
     const picked = TAGS.find(t => t[0] === tag);
     const list = q
-      ? rows.filter(b => fold(`${b.name} ${b.phone} ${b.table} ${b.note} ${b.dishes} ${tagsOf(b).join(' ')}`).includes(q)).sort(byTime).reverse()
+      ? rows.filter(b => fold(`${b.name} ${b.phone} ${b.table} ${b.note} ${b.dishes} ${b.block || ''} ${tagsOf(b).join(' ')}`).includes(q)).sort(byTime).reverse()
       : rows.filter(b => b.date === date && (!picked || (ACTIVE.has(b.status) && picked[2](b))))
         .sort((a, b) => (ACTIVE.has(b.status) - ACTIVE.has(a.status)) || byTime(a, b));
     const active = rows.filter(b => b.date === date && ACTIVE.has(b.status));
@@ -245,7 +264,7 @@
         <div><h2>${head}</h2>${q ? '' : `<p>${active.length} bàn · ${guests} khách${waiting ? ` · ${waiting} chờ xác nhận` : ''}${deposits ? ` · cọc ${money(deposits)}` : ''}</p>`}</div>
         ${!q && active.length ? `<button class="btn" data-act="share-day">Gửi cả ngày vào Zalo</button>` : ''}
       </div>
-      ${q ? '' : `<div class="stats">${stats}</div>`}
+      ${q ? '' : `<div class="stats">${stats}</div>${blockPanel(active)}`}
       <div class="list">${list.length ? list.map(b => card(b, !!q)).join('') : `<div class="empty">${q ? 'Không tìm thấy đặt bàn nào.' : picked ? `Không có bàn ${picked[1]} ngày này.` : 'Ngày này chưa có đặt bàn.'}</div>`}</div>`;
   }
 
@@ -280,6 +299,7 @@
   // ---------- form ----------
   function openForm(b) {
     editing = b || null;
+    pendingImages = [];
     const v = b || { date, time: '', name: '', phone: '', guests: 2, table: '', area: '', view: false, decor: false, deposit: '', dishes: '', source: 'Điện thoại', note: '' };
     const dlg = $('#dlg');
     dlg.innerHTML = `<form class="bk" id="f-bk" novalidate>
@@ -295,6 +315,7 @@
         <label class="f">Số khách<input id="f-guests" required type="number" inputmode="numeric" min="1" max="500" value="${esc(v.guests)}"></label>
       </div>
       <label class="f">Số bàn<input id="f-table" maxlength="40" value="${esc(v.table)}" placeholder="VD: Bàn 5" autocomplete="off"></label>
+      <label class="f">Block bàn / khu<input id="f-block" maxlength="80" value="${esc(v.block)}" placeholder="VD: Bàn 5, 6 hoặc cả sân vườn" autocomplete="off"></label>
       <div class="opts" role="radiogroup" aria-label="Khu vực">${AREAS.map(a => `<label class="opt"><input type="radio" name="f-area" value="${a}" ${a === v.area ? 'checked' : ''}>${a}</label>`).join('')}</div>
       <div class="opts">
         <label class="opt"><input type="checkbox" id="f-view" ${v.view ? 'checked' : ''}>Sát view</label>
@@ -305,6 +326,8 @@
         <label class="f">Món đặt trước<textarea id="f-dishes" rows="3" maxlength="500" placeholder="VD: 2 lẩu gà, 1 bánh kem">${esc(v.dishes)}</textarea></label>
         <label class="f">Tiền cọc (đồng)<input id="f-deposit" type="number" inputmode="numeric" min="0" step="1000" value="${esc(v.deposit || '')}" placeholder="Để trống nếu chưa cọc"></label>
       </fieldset>
+      <div class="f"><span>Hình (bàn chỉ định, mẫu decor…)</span><div class="thumbs" id="f-thumbs"></div>
+        <label class="btn">Thêm hình<input type="file" id="f-files" accept="image/*" multiple hidden></label></div>
       <label class="f">Khách đặt qua<select id="f-source">${SOURCES.map(s => `<option ${s === v.source ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
       <label class="f">Ghi chú<textarea id="f-note" rows="2" maxlength="300" placeholder="VD: sinh nhật, ghế em bé">${esc(v.note)}</textarea></label>
       <div class="warn" id="f-warn" role="alert"></div>
@@ -313,6 +336,65 @@
     </form>`;
     dlg.showModal();
     updateWarn();
+    renderThumbs();
+  }
+
+  // ---------- hình ----------
+  async function getImage(file) {
+    if (!imageCache.has(file)) imageCache.set(file, `data:image/jpeg;base64,${(await api('image', { file })).data}`);
+    return imageCache.get(file);
+  }
+
+  function fillImages(root) {
+    root.querySelectorAll('img[data-file]').forEach(el => {
+      getImage(el.dataset.file).then(src => { el.src = src; }).catch(() => { el.alt = 'Không tải được hình'; });
+    });
+  }
+
+  function renderThumbs() {
+    const box = $('#f-thumbs');
+    if (!box) return;
+    const saved = editing ? imgs(editing) : [];
+    box.innerHTML = saved.map(f => `<div class="thumb"><img data-file="${esc(f)}" alt="Hình đã lưu"><button type="button" data-act="rm-img" data-file="${esc(f)}" aria-label="Xoá hình">×</button></div>`).join('') +
+      pendingImages.map((d, i) => `<div class="thumb"><img src="data:image/jpeg;base64,${d}" alt="Hình chờ lưu"><button type="button" data-act="rm-new" data-i="${i}" aria-label="Bỏ hình">×</button></div>`).join('');
+    fillImages(box);
+  }
+
+  /** Thu nhỏ trên máy trước khi gửi: ảnh điện thoại vài MB còn khoảng 200 KB, mạng yếu vẫn tải được. */
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, IMAGE_SIDE / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * k);
+        canvas.height = Math.round(img.height * k);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Không đọc được hình này.')); };
+      img.src = url;
+    });
+  }
+
+  async function addFiles(files) {
+    const used = (editing ? imgs(editing).length : 0) + pendingImages.length;
+    const room = MAX_IMAGES - used;
+    if (files.length > room) toast(`Mỗi đặt bàn tối đa ${MAX_IMAGES} hình.`);
+    for (const f of files.slice(0, Math.max(0, room))) {
+      try { pendingImages.push(await shrink(f)); } catch (e) { toast(e.message); }
+    }
+    renderThumbs();
+  }
+
+  function openViewer(b) {
+    const v = $('#viewer');
+    v.innerHTML = `<div class="bk"><div class="dh"><h2>${esc(b.name)} · ${esc(b.time)}</h2><button class="btn" type="button" data-act="close-view">Đóng</button></div>
+      ${imgs(b).map(f => `<img class="full" data-file="${esc(f)}" alt="Hình đặt bàn">`).join('')}</div>`;
+    v.showModal();
+    fillImages(v);
   }
 
   /** Cảnh báo trùng, chỉ nhắc chứ không chặn: cùng bàn gần giờ, hoặc cùng SĐT trong ngày. */
@@ -346,7 +428,7 @@
       ver: editing ? editing.ver : 0,
       date: $('#f-date').value, time: $('#f-time').value, name: $('#f-name').value, phone: $('#f-phone').value,
       guests: Number($('#f-guests').value), table: $('#f-table').value,
-      area: ($('input[name=f-area]:checked') || {}).value || '', view: $('#f-view').checked, decor: $('#f-decor').checked, deposit: Number($('#f-deposit').value || 0), dishes: $('#f-dishes').value,
+      area: ($('input[name=f-area]:checked') || {}).value || '', view: $('#f-view').checked, decor: $('#f-decor').checked, deposit: Number($('#f-deposit').value || 0), dishes: $('#f-dishes').value, block: $('#f-block').value,
       source: $('#f-source').value, note: $('#f-note').value,
     };
     btn.disabled = true;
@@ -354,12 +436,19 @@
     try {
       absorb(await api('save', { booking }));
       online = true;
+      const queue = pendingImages.slice();
+      let failed = 0;
+      for (let i = 0; i < queue.length; i++) {
+        btn.textContent = `Đang tải hình ${i + 1}/${queue.length}…`;
+        try { absorb(await api('upload', { id: booking.id, data: queue[i] })); } catch (e) { failed++; }
+      }
+      pendingImages = [];
       $('#dlg').close();
       date = booking.date;
       query = '';
       tag = '';
       render();
-      toast(editing ? 'Đã lưu thay đổi.' : 'Đã lưu đặt bàn.');
+      toast(failed ? `Đã lưu, nhưng ${failed} hình chưa tải lên được. Mở Sửa để thêm lại.` : editing ? 'Đã lưu thay đổi.' : 'Đã lưu đặt bàn.');
     } catch (e) {
       $('#f-err').textContent = e.message;
       btn.disabled = false;
@@ -379,6 +468,18 @@
     else if (act === 'new') { clearBadge(); openForm(); }
     else if (act === 'edit') openForm(find());
     else if (act === 'close') $('#dlg').close();
+    else if (act === 'view') openViewer(find());
+    else if (act === 'close-view') $('#viewer').close();
+    else if (act === 'rm-new') { pendingImages.splice(Number(t.dataset.i), 1); renderThumbs(); }
+    else if (act === 'rm-img') {
+      t.disabled = true;
+      try {
+        absorb(await api('removeImage', { id: editing.id, file: t.dataset.file }));
+        editing = rows.find(b => b.id === editing.id) || null; // xoá hình tăng phiên bản, phải giữ bản mới để lưu được
+        renderThumbs();
+        render();
+      } catch (err) { toast(err.message); t.disabled = false; }
+    }
     else if (act === 'time') { $('#f-time').value = t.dataset.v; updateWarn(); }
     else if (act === 'share') shareText(bookingText(find()));
     else if (act === 'share-day') shareText(dayText());
@@ -398,6 +499,7 @@
   });
 
   document.addEventListener('change', e => {
+    if (e.target.id === 'f-files') { addFiles([...e.target.files]); e.target.value = ''; return; }
     if (e.target.id === 'pick' && e.target.value) { date = e.target.value; query = ''; tag = ''; render(); }
   });
 
